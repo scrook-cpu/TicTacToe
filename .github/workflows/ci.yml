@@ -1,0 +1,27 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi
+
+      - name: Run tests or smoke
+        run: |
+          set -e
+          # If tests are present, run pytest; otherwise run the example runner as a smoke test
+          if [ -d tests ] || ls -R . | grep -E '(^|/)(test_.*\.py|.*_test\.py)$' >/dev/null 2>&1; then
+            python -m pytest -q
+          else
+            python main.py
+          fi
