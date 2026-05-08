@@ -8,8 +8,7 @@ def initialize_weights(input_size: int, output_size: int) -> np.ndarray:
     Initialize a weight matrix with random values.
     TODO: Implement random initialization using np.random.randn, scaled appropriately (e.g., * 0.1).
     """
-    # TODO: Return a matrix of shape (output_size, input_size) with small random values.
-    pass
+    return np.random.randn(output_size, input_size) * 0.1
 
 
 def initialize_bias(output_size: int) -> np.ndarray:
@@ -17,9 +16,7 @@ def initialize_bias(output_size: int) -> np.ndarray:
     Initialize a bias vector with random values.
     TODO: Implement random initialization using np.random.randn, scaled appropriately.
     """
-    # TODO: Return a vector of shape (output_size,) with small random values.
-    pass
-
+    return np.random.randn(output_size) * 0.1
 
 def create_network(hidden_size: int = 10) -> Dict[str, Any]:
     """
