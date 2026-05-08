@@ -64,7 +64,7 @@ def generate_winning_lines(dims: Tuple[int, ...], k: int) -> List[List[int]]:
     For (3,3), k=3 -> classic tic-tac-toe lines.
     For (4,4,4), k=4 -> Atari-style 3D lines.
 
-    TODO (optional): Optimize / cache, but for these sizes it’s fine.
+    TODO (optional): Optimize / cache, but for these sizes it's fine.
     """
     D = len(dims)
 

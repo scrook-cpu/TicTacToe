@@ -19,7 +19,7 @@ class RandomPolicy:
     def scores(self, board: Sequence[int], player: Player, spec: GameSpec) -> np.ndarray:
         """
         Random scores for demo/testing.
-        TODO: Replace with HeuristicPolicy.scores().
+        Just populates our numpy 1d array with random values; the masking of illegal moves happens in choose_move.
         """
         return self.rng.standard_normal(spec.size)
 
@@ -51,14 +51,72 @@ def choose_move(policy: Policy, board: Sequence[int], player: Player, spec: Game
 @dataclass
 class HeuristicPolicy:
     """
-    TODO: This is where your “value add” starts.
-    Implement scores() using your heuristic matrices / line-based features.
+    Heuristic policy that prefers positions with more remaining winning-line potential,
+    and that always prioritizes immediate wins and immediate blocks.
     """
+    def _eligible_winning_lines(self, board_arr: np.ndarray, player: Player, spec: GameSpec):
+        """Yield lines that are still winnable for the specified player.
+
+        A line is eligible if it contains no opponent pieces and has at least one
+        empty square remaining.
+        """
+        opponent = -player
+        for line in spec.winning_lines:
+            line_vals = board_arr[list(line)]
+            if np.any(line_vals == opponent):
+                continue
+            yield line, line_vals
+
+    def _immediate_win_moves(self, board_arr: np.ndarray, player: Player, spec: GameSpec):
+        """Yield move indices that complete an immediate win for the player."""
+        for line in spec.winning_lines:
+            line_vals = board_arr[list(line)]
+            empty_indices = np.nonzero(line_vals == 0)[0]
+            if empty_indices.size != 1:
+                continue
+
+            empty_idx = line[empty_indices[0]]
+            if int(line_vals.sum()) == (spec.k - 1) * player:
+                yield empty_idx
+
+    def _immediate_block_moves(self, board_arr: np.ndarray, player: Player, spec: GameSpec):
+        """Yield move indices that block the opponent's immediate win."""
+        for line in spec.winning_lines:
+            line_vals = board_arr[list(line)]
+            empty_indices = np.nonzero(line_vals == 0)[0]
+            if empty_indices.size != 1:
+                continue
+
+            empty_idx = line[empty_indices[0]]
+            if int(line_vals.sum()) == -(spec.k - 1) * player:
+                yield empty_idx
+
     def scores(self, board: Sequence[int], player: Player, spec: GameSpec) -> np.ndarray:
-        # TODO:
-        # 1) Start with base positional priors (optional) OR line-based priors.
-        # 2) Add immediate-win bonuses (player has k-1 in a line, 1 empty).
-        # 3) Add immediate-block bonuses (opponent has k-1 in a line, 1 empty).
-        # 4) Add fork bonuses (optional but fun).
-        # 5) Return a length-N vector of move desirability.
-        return np.zeros(spec.size, dtype=float)
+        board_arr = np.asarray(board, dtype=int)
+        if board_arr.shape != (spec.size,):
+            raise ValueError(f"board must have shape ({spec.size},), got {board_arr.shape}")
+        if player not in (+1, -1):
+            raise ValueError("player must be +1 or -1")
+
+        scores = np.zeros(spec.size, dtype=float)
+
+        # Base positional heuristic: reward moves that appear in more possible winning lines.
+        for line, line_vals in self._eligible_winning_lines(board_arr, player, spec):
+            empty_indices = np.nonzero(line_vals == 0)[0]
+            if empty_indices.size == 0:
+                continue
+
+            player_count = np.count_nonzero(line_vals == player)
+            line_value = 1.0 + 0.5 * player_count
+            for empty_pos in empty_indices:
+                scores[line[empty_pos]] += line_value
+
+        immediate_win_bonus = 1_000.0
+        immediate_block_bonus = 900.0
+
+        for idx in self._immediate_win_moves(board_arr, player, spec):
+            scores[idx] += immediate_win_bonus
+        for idx in self._immediate_block_moves(board_arr, player, spec):
+            scores[idx] += immediate_block_bonus
+
+        return scores

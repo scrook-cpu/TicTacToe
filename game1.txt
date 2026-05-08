@@ -1,0 +1,53 @@
+Playing Heuristic X vs Random O with verbose move-by-move output.
+
+Turn 1: X (HeuristicPolicy)
+Scores:
+[[   3.0    2.0    3.0]
+ [   2.0    4.0    2.0]
+ [   3.0    2.0    3.0]]
+X plays 4
+. . .
+. X .
+. . .
+
+Turn 2: O (RandomPolicy)
+Scores:
+[[  -0.0   -0.2   -0.3]
+ [  -0.4    0.7    0.9]
+ [   1.1   -2.2    1.1]]
+O plays 6
+. . O
+. X .
+. . .
+
+Turn 3: X (HeuristicPolicy)
+Scores:
+[[   2.5    2.5    2.0]
+ [   1.5    0.0    2.5]
+ [   0.0    1.5    2.5]]
+X plays 0
+X . O
+. X .
+. . .
+
+Turn 4: O (RandomPolicy)
+Scores:
+[[   0.0   -0.1    0.3]
+ [   2.4   -1.3    0.4]
+ [   1.7   -0.4    0.0]]
+O plays 3
+X O O
+. X .
+. . .
+
+Turn 5: X (HeuristicPolicy)
+Scores:
+[[   0.0    3.0    2.5]
+ [   0.0    0.0    1.0]
+ [   0.0    1.5 1003.0]]
+X plays 8
+X O O
+. X .
+. . X
+
+Winner: X
