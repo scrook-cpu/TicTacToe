@@ -120,3 +120,54 @@ class HeuristicPolicy:
             scores[idx] += immediate_block_bonus
 
         return scores
+
+
+@dataclass
+class HeuristicExplorationPolicy(HeuristicPolicy):
+    """
+    Heuristic policy with added noise for exploration during training.
+    """
+    rng: np.random.Generator = np.random.default_rng()
+    noise_scale: float = 0.25
+    exploration_bonus =  2
+
+    def scores(self, board: Sequence[int], player: Player, spec: GameSpec) -> np.ndarray:
+        board_arr = np.asarray(board, dtype=int)
+        if board_arr.shape != (spec.size,):
+            raise ValueError(f"board must have shape ({spec.size},), got {board_arr.shape}")
+        if player not in (+1, -1):
+            raise ValueError("player must be +1 or -1")
+
+        scores = np.zeros(spec.size, dtype=float)
+
+        # Base positional heuristic: reward moves that appear in more possible winning lines.
+        for line, line_vals in self._eligible_winning_lines(board_arr, player, spec):
+            empty_indices = np.nonzero(line_vals == 0)[0]
+            if empty_indices.size == 0:
+                continue
+
+            player_count = np.count_nonzero(line_vals == player)
+            line_value = 1.0 + 0.5 * player_count
+            for empty_pos in empty_indices:
+                scores[line[empty_pos]] += line_value
+
+        immediate_win_bonus = 1_000.0
+        immediate_block_bonus = 900.0
+        tryRandom = True
+
+        for idx in self._immediate_win_moves(board_arr, player, spec):
+            scores[idx] += immediate_win_bonus
+            tryRandom = False
+        for idx in self._immediate_block_moves(board_arr, player, spec):
+            scores[idx] += immediate_block_bonus
+            tryRandom = False
+        
+        if tryRandom and self.rng.random() < self.noise_scale:
+            legal = legal_moves(board)
+
+            move = self.rng.choice(legal)
+
+            scores[move] += self.exploration_bonus
+          
+
+        return scores

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 import itertools
 
 Player = int  # +1 or -1
 Board = List[int]  # flat list length N = rows*cols*(levels...) ; values in {-1,0,+1}
+
+MoveRecord = Dict[str, Any]
+MoveCallback = Callable[[MoveRecord], None]
 
 
 @dataclass(frozen=True)
@@ -166,3 +169,96 @@ def render_2d(board: Sequence[int], dims: Tuple[int, ...] = (3, 3)) -> str:
             row.append(symbols[board[idx]])
         lines.append(" ".join(row))
     return "\n".join(lines)
+
+
+def choose_move_from_scores(scores: Sequence[float], board: Sequence[int]) -> int:
+    """
+    Select the highest-scoring legal move from a score vector.
+
+    This helper keeps legal-move masking in one reusable place for demos,
+    heuristic policies, and neural-network training.
+    """
+    best_idx: Optional[int] = None
+    best_score = float("-inf")
+
+    for i, score in enumerate(scores):
+        if board[i] != 0:
+            continue
+        if best_idx is None or score > best_score:
+            best_idx = i
+            best_score = float(score)
+
+    if best_idx is None:
+        raise ValueError("No legal moves available.")
+
+    return best_idx
+
+
+def choose_move(policy: Any, board: Sequence[int], player: Player, spec: GameSpec) -> int:
+    """
+    Ask a policy for move scores and return the best legal move.
+
+    A policy is expected to expose:
+        scores(board, player, spec) -> Sequence[float]
+    """
+    scores = policy.scores(board, player, spec)
+    return choose_move_from_scores(scores, board)
+
+
+def play_game(
+    pX: Any,
+    pO: Any,
+    spec: GameSpec,
+    move_callback: MoveCallback | None = None,
+) -> int:
+    """
+    Play one headless game between two policies.
+
+    Returns:
+        +1 if X wins, -1 if O wins, 0 for draw.
+
+    If move_callback is provided, it is called once per move with a record:
+        {
+            "turn": int,
+            "player": +1 or -1,
+            "policy": policy object,
+            "policy_name": str,
+            "board_before": list[int],
+            "scores": list[float],
+            "move": int,
+            "board_after": list[int],
+        }
+    """
+    board = new_board(spec)
+    player: Player = +1
+    turn = 0
+
+    while True:
+        turn += 1
+        policy = pX if player == +1 else pO
+        board_before = list(board)
+        scores = policy.scores(board_before, player, spec)
+        move = choose_move_from_scores(scores, board_before)
+        board = apply_move(board_before, move, player)
+
+        if move_callback is not None:
+            move_callback(
+                {
+                    "turn": turn,
+                    "player": player,
+                    "policy": policy,
+                    "policy_name": policy.__class__.__name__,
+                    "board_before": board_before,
+                    "scores": list(scores),
+                    "move": move,
+                    "board_after": list(board),
+                }
+            )
+
+        w = winner(board, spec)
+        if w is not None:
+            return w
+        if is_draw(board, spec):
+            return 0
+
+        player *= -1
