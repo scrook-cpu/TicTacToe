@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Dict, Any
+from typing import Dict, Any, List
 from .engine import GameSpec, legal_moves, play_game
 from .policies import HeuristicPolicy, RandomPolicy
 
@@ -212,6 +212,53 @@ def load_network(filename: str) -> Dict[str, Any]:
     }
 
     return network
+
+def train_with_checkpoints(
+    network: Dict[str, Any],
+    games_opponent,
+    games_opponent_name: str,
+    eval_opponents: Dict[str, Any],
+    checkpoints: List[int],
+    num_eval_games: int = 200,
+) -> List[Dict[str, Any]]:
+    """
+    Train network incrementally, evaluating at each checkpoint.
+
+    The NN watches HeuristicPolicy (X/teacher) play against games_opponent (O).
+    It is then evaluated as X against each entry in eval_opponents.
+
+    Returns a list of result rows suitable for writing to CSV:
+        checkpoint_games, teacher, games_opponent, eval_opponent,
+        wins, losses, draws, win_rate, draw_rate, loss_rate
+    """
+    sorted_checkpoints = sorted(checkpoints)
+    games_trained = 0
+    results = []
+
+    for target in sorted_checkpoints:
+        gap = target - games_trained
+        if gap > 0:
+            train_game(network, games_opponent, num_games=gap)
+            games_trained = target
+
+        for eval_name, eval_opponent in eval_opponents.items():
+            stats = evaluate_policy(network, eval_opponent, num_games=num_eval_games)
+            total = sum(stats.values())
+            results.append({
+                "checkpoint_games": games_trained,
+                "teacher": "heuristic",
+                "games_opponent": games_opponent_name,
+                "eval_opponent": eval_name,
+                "wins": stats["wins"],
+                "losses": stats["losses"],
+                "draws": stats["draws"],
+                "win_rate": round(stats["wins"] / total, 4),
+                "draw_rate": round(stats["draws"] / total, 4),
+                "loss_rate": round(stats["losses"] / total, 4),
+            })
+
+    return results
+
 
 def visualize_scores(board: np.ndarray, network: Dict[str, Any]):
     

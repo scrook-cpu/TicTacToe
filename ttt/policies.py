@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol, Sequence
+from functools import lru_cache
+from typing import Protocol, Sequence, Tuple
 import numpy as np
 
-from .engine import GameSpec, Player, legal_moves
+from .engine import GameSpec, Player, legal_moves, winner
 
 
 class Policy(Protocol):
@@ -119,6 +120,84 @@ class HeuristicPolicy:
         for idx in self._immediate_block_moves(board_arr, player, spec):
             scores[idx] += immediate_block_bonus
 
+        return scores
+
+
+@dataclass
+class ForkAwareHeuristicPolicy(HeuristicPolicy):
+    """
+    Extends HeuristicPolicy with an offensive fork kicker.
+
+    For each line where this player has at least one mark and the opponent has
+    none, a bonus is added to every empty square on that line. Squares that sit
+    on multiple such developing lines accumulate bonuses, making fork-building
+    moves naturally more attractive without overriding win/block priorities.
+    """
+    fork_kicker: float = 50.0
+
+    def scores(self, board: Sequence[int], player: Player, spec: GameSpec) -> np.ndarray:
+        scores = super().scores(board, player, spec)
+        board_arr = np.asarray(board, dtype=int)
+
+        for line, line_vals in self._eligible_winning_lines(board_arr, player, spec):
+            if np.count_nonzero(line_vals == player) == 0:
+                continue
+            for empty_pos in np.nonzero(line_vals == 0)[0]:
+                scores[line[empty_pos]] += self.fork_kicker
+
+        return scores
+
+
+_MINIMAX_WIN = 100  # magnitude of a terminal result; depth-adjusted below
+
+
+@lru_cache(maxsize=None)
+def _negamax_value(board: Tuple[int, ...], side: Player, spec: GameSpec) -> int:
+    """Game-theoretic value of `board` for the side to move, via negamax.
+
+    A terminal win is worth (WIN - plies) and a loss -(WIN - plies), so the search
+    prefers to win in fewer plies and to lose in more — i.e. it takes the quickest
+    forced win and drags out an unavoidable loss. Draws are 0. Memoized on the
+    (board, side, spec) triple, which is safe because the number of plies played is
+    fully determined by the board.
+    """
+    w = winner(board, spec)
+    if w is not None:
+        # The player who just moved (the opponent of `side`) has won, so the side
+        # to move is in a lost position.
+        plies = sum(1 for v in board if v != 0)
+        return -(_MINIMAX_WIN - plies)
+    if all(v != 0 for v in board):
+        return 0  # board full, no winner → draw
+
+    best = -(_MINIMAX_WIN + 1)
+    for i in range(len(board)):
+        if board[i] == 0:
+            child = board[:i] + (side,) + board[i + 1:]
+            val = -_negamax_value(child, -side, spec)
+            if val > best:
+                best = val
+    return best
+
+
+@dataclass
+class MinimaxPolicy:
+    """Perfect play via full-depth minimax (negamax).
+
+    Scores every legal move by the game-theoretic value of the position it leads
+    to, assuming both sides play optimally thereafter. On 3x3 this is cheap and,
+    once memoized, effectively instant. Intended as a 'perfect teacher' that —
+    unlike the heuristic — reasons about the opponent's replies and therefore
+    sees fork threats before they are sprung.
+    """
+
+    def scores(self, board: Sequence[int], player: Player, spec: GameSpec) -> np.ndarray:
+        board_t = tuple(int(v) for v in board)
+        scores = np.full(spec.size, -np.inf, dtype=float)
+        for i in range(spec.size):
+            if board_t[i] == 0:
+                child = board_t[:i] + (player,) + board_t[i + 1:]
+                scores[i] = -_negamax_value(child, -player, spec)
         return scores
 
 
